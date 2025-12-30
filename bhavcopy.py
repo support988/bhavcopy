@@ -68,7 +68,14 @@ params = {
 }
 
 resp = session.get(api_url, params=params, timeout=20)
-resp.raise_for_status()
+
+# NSE sometimes returns HTML instead of JSON
+if "application/json" not in resp.headers.get("Content-Type", ""):
+    print("❌ NSE returned non-JSON response")
+    print("Status:", resp.status_code)
+    print("Headers:", resp.headers.get("Content-Type"))
+    print("Body (first 500 chars):", resp.text[:500])
+    raise Exception("NSE API blocked the request (HTML response)")
 
 data = resp.json()
 
