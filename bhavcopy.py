@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 # CONFIG
 # =========================
 SAVE_PATH = "nse_bhavcopy.csv"
+MAX_LOOKBACK_DAYS = 10
 
-# NSE needs proper headers
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     "Accept": "application/json,text/plain,*/*",
@@ -22,58 +22,68 @@ BASE_URL = "https://www.nseindia.com"
 
 
 # =========================
-# GET LAST TRADING DAY
+# TRY DOWNLOAD FOR A DATE
 # =========================
-def get_last_trading_day():
-    d = datetime.today()
-    if d.weekday() == 0:   # Monday → Friday
-        d = d - timedelta(days=3)
-    elif d.weekday() == 6: # Sunday → Friday
-        d = d - timedelta(days=2)
-    else:
-        d = d - timedelta(days=1)
-    return d
-
-
-# =========================
-# DOWNLOAD BHAVCOPY
-# =========================
-def download_nse_bhavcopy():
-    trade_date = get_last_trading_day()
+def try_download_for_date(session, trade_date):
     date_str = trade_date.strftime("%d%b%Y").upper()
 
-    url = f"https://archives.nseindia.com/content/historical/EQUITIES/{trade_date.year}/{trade_date.strftime('%b').upper()}/cm{date_str}bhav.csv.zip"
+    url = (
+        f"https://archives.nseindia.com/content/historical/EQUITIES/"
+        f"{trade_date.year}/{trade_date.strftime('%b').upper()}/"
+        f"cm{date_str}bhav.csv.zip"
+    )
 
-    session = requests.Session()
-    session.headers.update(HEADERS)
-
-    # First hit NSE homepage to set cookies
-    session.get(BASE_URL, timeout=10)
-
-    print(f"Downloading NSE Bhavcopy for {date_str}...")
+    print(f"Trying: {date_str}")
     resp = session.get(url, timeout=20)
 
     if resp.status_code != 200:
-        raise Exception(f"Download failed. HTTP {resp.status_code}")
+        return None
 
-    # Extract ZIP
     with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
         csv_name = z.namelist()[0]
         with z.open(csv_name) as f:
             df = pd.read_csv(f)
 
-    df.to_csv(SAVE_PATH, index=False)
-    print("✅ Bhavcopy saved successfully:", SAVE_PATH)
-    print("Rows:", len(df))
-    return df
+    return df, date_str
 
 
 # =========================
-# MAIN
+# MAIN DOWNLOAD LOGIC
+# =========================
+def download_latest_bhavcopy():
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    # Set NSE cookies
+    session.get(BASE_URL, timeout=10)
+
+    today = datetime.today()
+
+    for i in range(1, MAX_LOOKBACK_DAYS + 1):
+        trade_date = today - timedelta(days=i)
+
+        # Skip Sundays
+        if trade_date.weekday() == 6:
+            continue
+
+        result = try_download_for_date(session, trade_date)
+        if result:
+            df, date_str = result
+            df.to_csv(SAVE_PATH, index=False)
+            print(f"\n✅ NSE Bhavcopy FOUND for {date_str}")
+            print("Saved to:", SAVE_PATH)
+            print("Rows:", len(df))
+            return df
+
+    raise Exception("Bhavcopy not found in last 10 days")
+
+
+# =========================
+# RUN
 # =========================
 if __name__ == "__main__":
     try:
-        df = download_nse_bhavcopy()
+        df = download_latest_bhavcopy()
         print(df.head())
     except Exception as e:
         print("❌ ERROR:", e)
