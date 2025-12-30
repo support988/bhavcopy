@@ -20,7 +20,7 @@ scope = [
 credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
 gc = gspread.authorize(credentials)
 
-sheet = gc.open(os.environ["SHEET_NAME"])
+sheet = gc.open("Daily_Bhavcopy")
 nse_sheet = sheet.worksheet("NSE")
 bse_sheet = sheet.worksheet("BSE")
 
