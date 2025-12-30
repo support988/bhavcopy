@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install libraries
+      - name: Install dependencies
         run: pip install pandas requests gspread google-auth
 
       - name: Run Bhavcopy
