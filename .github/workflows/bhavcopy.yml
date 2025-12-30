@@ -1,4 +1,4 @@
-name: Daily Bhavcopy
+name: Daily Bhavcopy Automation
 
 on:
   schedule:
@@ -6,20 +6,23 @@ on:
   workflow_dispatch:
 
 jobs:
-  run:
+  run-bhavcopy:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install pandas requests gspread google-auth
+        run: |
+          pip install pandas requests gspread google-auth
 
       - name: Run Bhavcopy
         env:
-          SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+          GSHEET_CREDS: ${{ secrets.GSHEET_CREDS }}
         run: python bhavcopy.py
