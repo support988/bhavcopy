@@ -1,74 +1,69 @@
 import requests
-import pandas as pd
-import json
-import gspread
-from google.oauth2.service_account import Credentials
-from datetime import datetime
-import io
 import zipfile
-import os
+import io
+import pandas as pd
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 
-# ---------------- DATE ----------------
-trade_date = datetime.now().strftime("%d-%b-%Y")
-bse_date = datetime.now().strftime("%Y%m%d")
+# =======================
+# GOOGLE SHEETS SETUP
+# =======================
+import json, os
 
-# ---------------- GOOGLE AUTH ----------------
-service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+creds_json = json.loads(os.environ["GSHEET_CREDS"])
 
 scope = [
-    "https://www.googleapis.com/auth/spreadsheets",
+    "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
 
-creds = Credentials.from_service_account_info(
-    service_account_info, scopes=scope
-)
+credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
+gc = gspread.authorize(credentials)
 
-gc = gspread.authorize(creds)
+sheet = gc.open(os.environ["SHEET_NAME"])
+nse_sheet = sheet.worksheet("NSE")
+bse_sheet = sheet.worksheet("BSE")
 
-sheet = gc.open("Daily_Bhavcopy")
-nse_ws = sheet.worksheet("NSE")
-bse_ws = sheet.worksheet("BSE")
+# =======================
+# DATE
+# =======================
+date = datetime.now().strftime("%d%b%Y").upper()
+date_bse = datetime.now().strftime("%d%m%y")
 
-# ---------------- NSE UDIFF ----------------
+# =======================
+# NSE DOWNLOAD (FIXED)
+# =======================
 session = requests.Session()
 headers = {
     "User-Agent": "Mozilla/5.0",
     "Accept": "*/*",
-    "Referer": "https://www.nseindia.com/all-reports",
-    "X-Requested-With": "XMLHttpRequest"
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nseindia.com/",
 }
 
 session.get("https://www.nseindia.com", headers=headers)
 
-nse_url = "https://www.nseindia.com/api/reports"
-params = {
-    "archives": '[{"name":"CM-UDiFF Common Bhavcopy Final (zip)","type":"daily-reports","category":"capital-market","section":"equities"}]',
-    "date": trade_date,
-    "type": "equities",
-    "mode": "single"
-}
+nse_url = f"https://archives.nseindia.com/content/historical/EQUITIES/{datetime.now().year}/{datetime.now().strftime('%b').upper()}/cm{date}bhav.csv.zip"
 
-resp = session.get(nse_url, headers=headers, params=params)
+resp = session.get(nse_url, headers=headers)
+
 z = zipfile.ZipFile(io.BytesIO(resp.content))
-nse_file = z.namelist()[0]
+csv_name = z.namelist()[0]
+nse_df = pd.read_csv(z.open(csv_name))
 
-nse_df = pd.read_csv(z.open(nse_file))[["ISIN", "TradDt", "TckrSymb", "ClsPric"]]
+# =======================
+# BSE DOWNLOAD
+# =======================
+bse_url = f"https://www.bseindia.com/download/BhavCopy/Equity/EQ{date_bse}_CSV.ZIP"
+resp = requests.get(bse_url)
 
-# ---------------- BSE ----------------
-bse_url = f"https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{bse_date}_F_0000.CSV"
-bse_resp = requests.get(bse_url)
+z = zipfile.ZipFile(io.BytesIO(resp.content))
+csv_name = z.namelist()[0]
+bse_df = pd.read_csv(z.open(csv_name))
 
-bse_raw = pd.read_csv(io.BytesIO(bse_resp.content))
-bse_df = bse_raw.rename(columns={
-    "ISIN_CODE": "ISIN",
-    "TRADE_DATE": "TradDt",
-    "SC_NAME": "TckrSymb",
-    "CLOSE": "ClsPric"
-})[["ISIN", "TradDt", "TckrSymb", "ClsPric"]]
+# =======================
+# UPLOAD TO SHEETS
+# =======================
+nse_s_
 
-# ---------------- PUSH TO SHEETS ----------------
-nse_ws.append_rows(nse_df.values.tolist())
-bse_ws.append_rows(bse_df.values.tolist())
-
-print("Bhavcopy updated successfully")
