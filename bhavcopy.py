@@ -2,52 +2,77 @@ import requests
 import zipfile
 import io
 import pandas as pd
-from datetime import datetime, timedelta
+import datetime
+import sys
 
+# ---------------- CONFIG ----------------
+NSE_API = "https://www.nseindia.com/api/reports"
 HEADERS = {
     "User-Agent": "Mozilla/5.0",
-    "Accept": "*/*",
-    "Referer": "https://www.nseindia.com",
+    "Accept": "application/json",
+    "Referer": "https://www.nseindia.com/all-reports"
 }
 
-SAVE_PATH = "nse_bhavcopy.csv"
-BASE_URL = "https://archives.nseindia.com/content/udiff/"
-LOOKBACK_DAYS = 15
+ARCHIVES_PAYLOAD = [{
+    "name": "CM-UDiFF Common Bhavcopy Final (zip)",
+    "type": "daily-reports",
+    "category": "capital-market",
+    "section": "equities"
+}]
 
+# ---------------- DATE (Yesterday) ----------------
+yesterday = datetime.date.today() - datetime.timedelta(days=1)
+date_str = yesterday.strftime("%d-%b-%Y")
 
-def download_latest_udiff_bhavcopy():
-    session = requests.Session()
-    session.headers.update(HEADERS)
+print(f"📅 Requesting NSE Bhavcopy for: {date_str}")
 
-    for i in range(LOOKBACK_DAYS):
-        date = datetime.utcnow() - timedelta(days=i)
-        date_str = date.strftime("%Y%m%d")
+# ---------------- SESSION ----------------
+session = requests.Session()
+session.headers.update(HEADERS)
 
-        file_name = f"CM_UDiFF_Common_Bhavcopy_{date_str}_FINAL.zip"
-        url = BASE_URL + file_name
+# First call NSE homepage (mandatory)
+session.get("https://www.nseindia.com", timeout=10)
 
-        print(f"Trying: {file_name}")
-        resp = session.get(url, timeout=20)
+# ---------------- API CALL ----------------
+params = {
+    "archives": str(ARCHIVES_PAYLOAD).replace("'", '"'),
+    "date": date_str,
+    "type": "equities",
+    "mode": "single"
+}
 
-        if resp.status_code != 200:
-            continue
+resp = session.get(NSE_API, params=params, timeout=15)
 
-        # ZIP CONFIRMED
-        with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
-            csv_files = [f for f in z.namelist() if f.endswith(".csv")]
-            if not csv_files:
-                continue
+# ---------------- VALIDATION ----------------
+if resp.headers.get("Content-Type", "").startswith("text/html"):
+    print("❌ NSE returned HTML — bhavcopy not released yet")
+    sys.exit(1)
 
-            with z.open(csv_files[0]) as f:
-                df = pd.read_csv(f)
+data = resp.json()
 
-        df.to_csv(SAVE_PATH, index=False)
-        print(f"\n✅ NSE Bhavcopy downloaded successfully: {date_str}")
-        print("Rows:", len(df))
-        return df
+if not data or "filePath" not in data[0]:
+    print("❌ NSE API returned no filePath")
+    sys.exit(1)
 
-    raise Exception("No NSE Bhavcopy found in last 15 days")
+zip_url = "https://archives.nseindia.com" + data[0]["filePath"]
+print("⬇ Downloading:", zip_url)
 
+# ---------------- DOWNLOAD ZIP ----------------
+zip_resp = session.get(zip_url, timeout=20)
+zip_resp.raise_for_status()
 
-if __name__ == "__main__":
-    download_latest_udiff_bhavcopy()
+z = zipfile.ZipFile(io.BytesIO(zip_resp.content))
+csv_name = z.namelist()[0]
+
+# ---------------- READ CSV ----------------
+df = pd.read_csv(z.open(csv_name))
+
+# ---------------- REQUIRED HEADERS ----------------
+final_df = df[["ISIN", "TRAD_DT", "TCKR_SYMB", "CLS_PRC"]].rename(columns={
+    "TRAD_DT": "TradDt",
+    "TCKR_SYMB": "TckrSymb",
+    "CLS_PRC": "ClsPric"
+})
+
+final_df.to_csv("NSE_Bhavcopy.csv", index=False)
+print("✅ NSE Bhavcopy saved successfully")
