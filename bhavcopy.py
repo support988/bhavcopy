@@ -83,7 +83,8 @@ if missing:
     print("❌ Missing columns:", missing)
     print("Available:", list(df.columns))
     sys.exit(1)
-
+    
+final_df["TradDt"] = pd.to_datetime(final_df["TradDt"]).dt.strftime("%Y-%m-%d")
 final_df = df[list(COLUMN_MAP.keys())].rename(columns=COLUMN_MAP)
 
 final_df.to_csv("NSE_Bhavcopy.csv", index=False)
