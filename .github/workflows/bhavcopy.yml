@@ -26,6 +26,7 @@ jobs:
       - name: Run Bhavcopy Script
         env:
           GSHEET_CREDS: ${{ secrets.GSHEET_CREDS }}
-          SHEET_NAME: ${{ secrets.SHEET_NAME }}
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+
         run: |
           python bhavcopy.py
