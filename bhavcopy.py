@@ -95,7 +95,7 @@ scopes = ["https://www.googleapis.com/auth/spreadsheets"]
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 gc = gspread.authorize(creds)
 
-sheet = gc.open_by_key(os.environ["12wPimimekxtuawJhcHtUEW7Cr4-Q_uHto5C4odq3lQ4"])
+sheet = gc.open_by_key(os.environ["SPREADSHEET_ID"])
 worksheet = sheet.worksheet("NSE")
 
 worksheet.clear()
