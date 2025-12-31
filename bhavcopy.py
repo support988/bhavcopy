@@ -94,6 +94,8 @@ creds_dict = json.loads(os.environ["GSHEET_CREDS"])
 scopes = ["https://www.googleapis.com/auth/spreadsheets"]
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 gc = gspread.authorize(creds)
+print("DEBUG → Spreadsheet ID loaded:", os.environ.get("SPREADSHEET_ID"))
+
 
 sheet = gc.open_by_key(os.environ["SPREADSHEET_ID"])
 worksheet = sheet.worksheet("NSE")
