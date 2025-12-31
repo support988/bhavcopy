@@ -99,14 +99,18 @@ final_df = final_df.rename(columns=COLUMN_MAP)
 final_df.to_csv("NSE_Bhavcopy.csv", index=False)
 print("✅ NSE Bhavcopy saved successfully")
 
-import gspread
 from google.oauth2.service_account import Credentials
+import gspread
 import json
 import os
 
-# ---- Google Sheets Auth ----
 creds_dict = json.loads(os.environ["GSHEET_CREDS"])
-scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 gc = gspread.authorize(creds)
 
