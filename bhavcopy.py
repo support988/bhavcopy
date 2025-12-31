@@ -85,7 +85,6 @@ if missing:
     sys.exit(1)
     
 final_df = df[list(COLUMN_MAP.keys())].rename(columns=COLUMN_MAP)
-final_df["Trade_Date"] = pd.to_datetime(final_df["Trade_Date"]).dt.strftime("%Y-%m-%d")
 
 final_df.to_csv("NSE_Bhavcopy.csv", index=False)
 print("✅ NSE Bhavcopy saved locally")
@@ -95,7 +94,6 @@ creds_dict = json.loads(os.environ["GSHEET_CREDS"])
 scopes = ["https://www.googleapis.com/auth/spreadsheets"]
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 gc = gspread.authorize(creds)
-print("DEBUG → Spreadsheet ID loaded:", os.environ.get("SPREADSHEET_ID"))
 
 
 sheet = gc.open_by_key(os.environ["SPREADSHEET_ID"])
