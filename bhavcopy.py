@@ -76,12 +76,25 @@ else:
     print("❌ NSE bhavcopy not released yet")
     sys.exit(1)
 
-# ---------------- FINAL CLEANING ----------------
-final_df = df[["ISIN", "TRAD_DT", "TCKR_SYMB", "CLS_PRC"]].rename(columns={
-    "TRAD_DT": "TradDt",
-    "TCKR_SYMB": "TckrSymb",
-    "CLS_PRC": "ClsPric"
-})
+# ---- Normalize column names (UDiFF compatible) ----
+df.columns = [c.strip() for c in df.columns]
+
+COLUMN_MAP = {
+    "ISIN": "ISIN",
+    "TradDt": "TradDt",
+    "TckrSymb": "TckrSymb",
+    "ClsPric": "ClsPric"
+}
+
+missing = [c for c in COLUMN_MAP if c not in df.columns]
+if missing:
+    print("❌ Missing required columns:", missing)
+    print("Available columns:", list(df.columns))
+    sys.exit(1)
+
+final_df = df[list(COLUMN_MAP.keys())]
+final_df = final_df.rename(columns=COLUMN_MAP)
+
 
 final_df.to_csv("NSE_Bhavcopy.csv", index=False)
 print("✅ NSE Bhavcopy saved successfully")
