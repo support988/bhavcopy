@@ -6,10 +6,10 @@ import datetime
 import sys
 
 # ---------------- CONFIG ----------------
-NSE_API = "https://www.nseindia.com/api/reports"
+API_URL = "https://www.nseindia.com/api/reports"
 HEADERS = {
     "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json",
+    "Accept": "*/*",
     "Referer": "https://www.nseindia.com/all-reports"
 }
 
@@ -23,17 +23,15 @@ ARCHIVES_PAYLOAD = [{
 # ---------------- DATE (Yesterday) ----------------
 yesterday = datetime.date.today() - datetime.timedelta(days=1)
 date_str = yesterday.strftime("%d-%b-%Y")
-
 print(f"📅 Requesting NSE Bhavcopy for: {date_str}")
 
 # ---------------- SESSION ----------------
 session = requests.Session()
 session.headers.update(HEADERS)
 
-# First call NSE homepage (mandatory)
+# Mandatory warm-up
 session.get("https://www.nseindia.com", timeout=10)
 
-# ---------------- API CALL ----------------
 params = {
     "archives": str(ARCHIVES_PAYLOAD).replace("'", '"'),
     "date": date_str,
@@ -41,33 +39,44 @@ params = {
     "mode": "single"
 }
 
-resp = session.get(NSE_API, params=params, timeout=15)
+resp = session.get(API_URL, params=params, timeout=20)
 
-# ---------------- VALIDATION ----------------
-if resp.headers.get("Content-Type", "").startswith("text/html"):
-    print("❌ NSE returned HTML — bhavcopy not released yet")
+content_type = resp.headers.get("Content-Type", "").lower()
+print("📦 NSE Response Content-Type:", content_type)
+
+# ---------------- CASE 1: NSE RETURNS ZIP DIRECTLY ----------------
+if "zip" in content_type:
+    print("✅ NSE returned ZIP directly")
+
+    z = zipfile.ZipFile(io.BytesIO(resp.content))
+    csv_name = z.namelist()[0]
+    df = pd.read_csv(z.open(csv_name))
+
+# ---------------- CASE 2: NSE RETURNS JSON ----------------
+elif "json" in content_type:
+    print("ℹ NSE returned JSON metadata")
+
+    data = resp.json()
+    if not data or "filePath" not in data[0]:
+        print("❌ JSON response but no filePath")
+        sys.exit(1)
+
+    zip_url = "https://archives.nseindia.com" + data[0]["filePath"]
+    print("⬇ Downloading:", zip_url)
+
+    zip_resp = session.get(zip_url, timeout=20)
+    zip_resp.raise_for_status()
+
+    z = zipfile.ZipFile(io.BytesIO(zip_resp.content))
+    csv_name = z.namelist()[0]
+    df = pd.read_csv(z.open(csv_name))
+
+# ---------------- CASE 3: NSE BLOCKED / HTML ----------------
+else:
+    print("❌ NSE bhavcopy not released yet")
     sys.exit(1)
 
-data = resp.json()
-
-if not data or "filePath" not in data[0]:
-    print("❌ NSE API returned no filePath")
-    sys.exit(1)
-
-zip_url = "https://archives.nseindia.com" + data[0]["filePath"]
-print("⬇ Downloading:", zip_url)
-
-# ---------------- DOWNLOAD ZIP ----------------
-zip_resp = session.get(zip_url, timeout=20)
-zip_resp.raise_for_status()
-
-z = zipfile.ZipFile(io.BytesIO(zip_resp.content))
-csv_name = z.namelist()[0]
-
-# ---------------- READ CSV ----------------
-df = pd.read_csv(z.open(csv_name))
-
-# ---------------- REQUIRED HEADERS ----------------
+# ---------------- FINAL CLEANING ----------------
 final_df = df[["ISIN", "TRAD_DT", "TCKR_SYMB", "CLS_PRC"]].rename(columns={
     "TRAD_DT": "TradDt",
     "TCKR_SYMB": "TckrSymb",
