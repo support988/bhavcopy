@@ -98,3 +98,28 @@ final_df = final_df.rename(columns=COLUMN_MAP)
 
 final_df.to_csv("NSE_Bhavcopy.csv", index=False)
 print("✅ NSE Bhavcopy saved successfully")
+
+import gspread
+from google.oauth2.service_account import Credentials
+import json
+import os
+
+# ---- Google Sheets Auth ----
+creds_dict = json.loads(os.environ["GSHEET_CREDS"])
+scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+gc = gspread.authorize(creds)
+
+sheet = gc.open(os.environ["SHEET_NAME"])
+nse_ws = sheet.worksheet("NSE")
+
+# ---- Clear old data ----
+nse_ws.clear()
+
+# ---- Upload new data ----
+nse_ws.update(
+    [final_df.columns.tolist()] + final_df.values.tolist()
+)
+
+print("✅ NSE data uploaded to Google Sheets")
+
