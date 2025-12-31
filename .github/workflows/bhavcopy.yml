@@ -2,7 +2,7 @@ name: Daily Bhavcopy
 
 on:
   schedule:
-    - cron: ""30 21 * * *"   # 03:00 AM IST
+    - cron: "30 21 * * *"   # 03:00 AM IST
   workflow_dispatch:
 
 jobs:
@@ -27,6 +27,5 @@ jobs:
         env:
           GSHEET_CREDS: ${{ secrets.GSHEET_CREDS }}
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
-
         run: |
           python bhavcopy.py
