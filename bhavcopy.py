@@ -90,7 +90,8 @@ COLUMN_MAP_NSE = {
     "ISIN": "ISIN",
     "TradDt": "Trade_Date",
     "TckrSymb": "Symbol",
-    "ClsPric": "Close_Price"
+    "ClsPric": "Close_Price",
+    "SctySrs": "SctySrs"
 }
 
 df_nse_final = df_nse[list(COLUMN_MAP_NSE.keys())].rename(columns=COLUMN_MAP_NSE)
@@ -128,7 +129,8 @@ COLUMN_MAP_BSE = {
     "ISIN": "ISIN",
     "TradDt": "Trade_Date",
     "TckrSymb": "Symbol",
-    "ClsPric": "Close_Price"
+    "ClsPric": "Close_Price",
+    "SctySrs": "SctySrs"
 }
 
 missing = [c for c in COLUMN_MAP_BSE if c not in df_bse.columns]
