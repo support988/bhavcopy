@@ -98,6 +98,8 @@ df_nse_final = df_nse[list(COLUMN_MAP_NSE.keys())].rename(columns=COLUMN_MAP_NSE
 
 ws_nse = sheet.worksheet("NSE")
 ws_nse.clear()
+df_nse_final = df_nse_final.replace([float("inf"), float("-inf")], "")
+df_nse_final = df_nse_final.fillna("")
 ws_nse.update([df_nse_final.columns.tolist()] + df_nse_final.values.tolist())
 
 print(f"✅ NSE uploaded: {len(df_nse_final)} rows")
@@ -141,6 +143,8 @@ df_bse_final = df_bse[list(COLUMN_MAP_BSE.keys())].rename(columns=COLUMN_MAP_BSE
 
 ws_bse = sheet.worksheet("BSE")
 ws_bse.clear()
+df_bse_final = df_bse_final.replace([float("inf"), float("-inf")], "")
+df_bse_final = df_bse_final.fillna("")
 ws_bse.update([df_bse_final.columns.tolist()] + df_bse_final.values.tolist())
 
 print(f"✅ BSE uploaded: {len(df_bse_final)} rows")
