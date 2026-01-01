@@ -8,6 +8,7 @@ import os
 import json
 import gspread
 from google.oauth2.service_account import Credentials
+from datetime import datetime, timedelta, timezone
 
 # =========================
 # COMMON CONFIG
@@ -18,7 +19,9 @@ HEADERS = {
     "Referer": "https://www.nseindia.com/all-reports"
 }
 
-trade_date = datetime.date.today() - datetime.timedelta(days=1)
+IST = timezone(timedelta(hours=5, minutes=30))
+today_ist = datetime.now(IST).date()
+trade_date = today_ist - timedelta(days=1)
 date_str_nse = trade_date.strftime("%d-%b-%Y")
 date_str_bse = trade_date.strftime("%Y%m%d")
 
