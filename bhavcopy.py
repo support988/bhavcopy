@@ -9,6 +9,8 @@ import json
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta, timezone
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # =========================
 # COMMON CONFIG
@@ -53,6 +55,17 @@ ARCHIVES_PAYLOAD = [{
 
 session = requests.Session()
 session.headers.update(HEADERS)
+
+# ✅ ADD THIS BLOCK (Retry + Backoff)
+retry_strategy = Retry(
+    total=5,                 # total retries
+    backoff_factor=3,         # 3s, 6s, 12s, ...
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["GET"]
+)
+
+adapter = HTTPAdapter(max_retries=retry_strategy)
+session.mount("https://", adapter)
 
 # Warm-up (MANDATORY for NSE)
 session.get("https://www.nseindia.com", timeout=10)
