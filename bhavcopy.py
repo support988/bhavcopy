@@ -17,9 +17,9 @@ import random
 # =========================
 # RANDOM STARTUP DELAY (Anti-Bot)
 # =========================
-random_minutes = random.randint(0, 30)  # 0-30 minutes random delay
-random_seconds = random.randint(0, 59)  # 0-59 seconds
-total_delay_seconds = (random_minutes * 60) + random_seconds
+# random_minutes = random.randint(0, 30)  # 0-30 minutes random delay
+# random_seconds = random.randint(0, 59)  # 0-59 seconds
+# total_delay_seconds = (random_minutes * 60) + random_seconds
 
 print(f"⏰ Random startup delay: {random_minutes}m {random_seconds}s (avoiding bot detection)")
 time.sleep(total_delay_seconds)
