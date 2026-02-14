@@ -26,7 +26,7 @@ def get_realistic_headers():
 session = requests.Session()
 date_str = "13-Feb-2026"
 
-# Stage 1-2
+# Stages 1-2
 session.headers.update(get_realistic_headers())
 session.get("https://www.nseindia.com", timeout=60)
 time.sleep(3)
@@ -61,43 +61,39 @@ session.headers.update({
 resp = session.get(API_URL, params=params, timeout=180)
 content = resp.content
 
-print("=== DIAGNOSTICS ===")
-print(f"Length: {len(content)}")
-print(f"First 20 bytes (hex): {content[:20].hex()}")
-print(f"First 20 bytes (repr): {repr(content[:20])}")
-
-# Try different decompression methods
-print("\n=== TRYING ZLIB ===")
+print("=== TRYING GZIP (manual) ===")
 try:
-    import zlib
-    decompressed = zlib.decompress(content)
-    print(f"✅ ZLIB SUCCESS! Length: {len(decompressed)}")
-    print(f"First 200 chars: {decompressed[:200]}")
+    import gzip
+    decompressed = gzip.decompress(content)
+    print(f"✅ GZIP SUCCESS! Length: {len(decompressed)}")
+    print(f"Content: {decompressed[:500]}")
 except Exception as e:
-    print(f"❌ ZLIB failed: {e}")
+    print(f"❌ GZIP failed: {e}")
 
-print("\n=== TRYING ZLIB WITH WBITS ===")
-try:
-    import zlib
-    decompressed = zlib.decompress(content, -zlib.MAX_WBITS)
-    print(f"✅ ZLIB (raw deflate) SUCCESS! Length: {len(decompressed)}")
-    print(f"First 200 chars: {decompressed[:200]}")
-except Exception as e:
-    print(f"❌ ZLIB (raw deflate) failed: {e}")
+print("\n=== CHECKING IF IT'S AN IMAGE (JPEG) ===")
+if content[:2] == b'\xff\xd8':
+    print("✅ This is a JPEG image!")
+elif content[:4] == b'\x89PNG':
+    print("✅ This is a PNG image!")
+elif content[:2] == b'BM':
+    print("✅ This is a BMP image!")
+else:
+    print(f"❌ Not a standard image format")
+    print(f"First bytes: {content[:10].hex()}")
 
-print("\n=== TRYING BROTLI ===")
-try:
-    import brotli
-    decompressed = brotli.decompress(content)
-    print(f"✅ BROTLI SUCCESS! Length: {len(decompressed)}")
-    print(f"First 200 chars: {decompressed[:200]}")
-except ImportError:
-    print("❌ brotli not installed")
-except Exception as e:
-    print(f"❌ BROTLI failed: {e}")
+print("\n=== TRYING TO SKIP HEADER ===")
+# Maybe there's a custom header, try skipping first N bytes
+for skip in [0, 4, 8, 16, 32, 64]:
+    try:
+        import zipfile
+        import io
+        z = zipfile.ZipFile(io.BytesIO(content[skip:]))
+        print(f"✅ ZIP SUCCESS by skipping {skip} bytes! Files: {z.namelist()}")
+        break
+    except:
+        pass
 
-print("\n=== SAVE RAW FILE ===")
-with open('/tmp/nse_response.bin', 'wb') as f:
-    f.write(content)
-print("Saved to /tmp/nse_response.bin")
-print("Run: file /tmp/nse_response.bin")
+print("\n=== CHECK HTTP HEADERS ===")
+print(f"Content-Type: {resp.headers.get('Content-Type')}")
+print(f"Content-Encoding: {resp.headers.get('Content-Encoding')}")
+print(f"All headers: {dict(resp.headers)}")
