@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 # SMART ANTI-BOT EVASION CONFIG
 # ========================= 
 
-# Rotate user agents to avoid detection
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -214,26 +213,42 @@ def process_nse_data(z):
         df_nse = pd.read_csv(z.open(csv_name))
         df_nse.columns = [c.strip() for c in df_nse.columns]
         
-        logger.info(f"📊 Columns: {df_nse.columns.tolist()[:10]}...")
+        logger.info(f"📊 NSE Columns: {df_nse.columns.tolist()[:10]}...")
         
+        # NSE column mapping
         possible_mappings = [
-            {"ISIN": "ISIN", "TradDt": "Trade_Date", "TckrSymb": "Symbol", "ClsPric": "Close_Price", "SctySrs": "SctySrs"},
-            {"ISIN": "ISIN", "TIMESTAMP": "Trade_Date", "SYMBOL": "Symbol", "CLOSE": "Close_Price", "SERIES": "SctySrs"},
+            {
+                "ISIN": "ISIN",
+                "TradDt": "Trade_Date",
+                "TckrSymb": "Symbol",
+                "ClsPric": "Close_Price",
+                "SctySrs": "SctySrs"
+            },
+            {
+                "ISIN": "ISIN",
+                "TIMESTAMP": "Trade_Date",
+                "SYMBOL": "Symbol",
+                "CLOSE": "Close_Price",
+                "SERIES": "SctySrs"
+            },
         ]
         
         COLUMN_MAP_NSE = None
         for mapping in possible_mappings:
             if all(c in df_nse.columns for c in mapping):
                 COLUMN_MAP_NSE = mapping
+                logger.info(f"✅ Using NSE mapping: {list(mapping.keys())}")
                 break
         
         if not COLUMN_MAP_NSE:
-            logger.error(f"❌ No valid mapping. Columns: {df_nse.columns.tolist()}")
+            logger.error(f"❌ No valid NSE mapping found")
+            logger.error(f"   Available columns: {df_nse.columns.tolist()}")
             return False
         
         df_nse_final = df_nse[list(COLUMN_MAP_NSE.keys())].rename(columns=COLUMN_MAP_NSE)
         df_nse_final = df_nse_final.replace([float("inf"), float("-inf")], "").fillna("")
         
+        logger.info("📤 Uploading to Google Sheets (NSE tab)")
         ws_nse = sheet.worksheet("NSE")
         ws_nse.clear()
         ws_nse.update([df_nse_final.columns.tolist()] + df_nse_final.values.tolist())
@@ -242,6 +257,8 @@ def process_nse_data(z):
         return True
     except Exception as e:
         logger.error(f"❌ NSE processing failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 # ========================= 
@@ -265,6 +282,7 @@ def fetch_bse_bhavcopy(trade_date, date_str):
             bse_resp = session.get(url, timeout=90)
             
             if bse_resp.status_code == 200:
+                logger.info(f"✅ BSE response: {len(bse_resp.content)} bytes")
                 if url.endswith('.ZIP'):
                     z = zipfile.ZipFile(io.BytesIO(bse_resp.content))
                     return pd.read_csv(z.open(z.namelist()[0]))
@@ -278,26 +296,51 @@ def fetch_bse_bhavcopy(trade_date, date_str):
 def process_bse_data(df_bse):
     try:
         df_bse.columns = [c.strip() for c in df_bse.columns]
-        logger.info(f"📊 Columns: {df_bse.columns.tolist()[:10]}...")
+        logger.info(f"📊 BSE Columns: {df_bse.columns.tolist()[:10]}...")
         
+        # BSE now uses same format as NSE!
         possible_mappings = [
-            {"ISIN_CODE": "ISIN", "TRADING_DATE": "Trade_Date", "SC_NAME": "Symbol", "CLOSE": "Close_Price", "SC_TYPE": "SctySrs"},
-            {"SC_CODE": "ISIN", "DATE1": "Trade_Date", "SC_NAME": "Symbol", "CLOSE": "Close_Price", "SC_TYPE": "SctySrs"},
+            # NEW: BSE uses NSE-like format
+            {
+                "ISIN": "ISIN",
+                "TradDt": "Trade_Date",
+                "TckrSymb": "Symbol",
+                "ClsPric": "Close_Price",
+                "SctySrs": "SctySrs"
+            },
+            # Old BSE formats (fallback)
+            {
+                "ISIN_CODE": "ISIN",
+                "TRADING_DATE": "Trade_Date",
+                "SC_NAME": "Symbol",
+                "CLOSE": "Close_Price",
+                "SC_TYPE": "SctySrs"
+            },
+            {
+                "SC_CODE": "ISIN",
+                "DATE1": "Trade_Date",
+                "SC_NAME": "Symbol",
+                "CLOSE": "Close_Price",
+                "SC_TYPE": "SctySrs"
+            },
         ]
         
         COLUMN_MAP_BSE = None
         for mapping in possible_mappings:
             if all(c in df_bse.columns for c in mapping):
                 COLUMN_MAP_BSE = mapping
+                logger.info(f"✅ Using BSE mapping: {list(mapping.keys())}")
                 break
         
         if not COLUMN_MAP_BSE:
-            logger.error(f"❌ No valid mapping. Columns: {df_bse.columns.tolist()}")
+            logger.error(f"❌ No valid BSE mapping found")
+            logger.error(f"   Available columns: {df_bse.columns.tolist()}")
             return False
         
         df_bse_final = df_bse[list(COLUMN_MAP_BSE.keys())].rename(columns=COLUMN_MAP_BSE)
         df_bse_final = df_bse_final.replace([float("inf"), float("-inf")], "").fillna("")
         
+        logger.info("📤 Uploading to Google Sheets (BSE tab)")
         ws_bse = sheet.worksheet("BSE")
         ws_bse.clear()
         ws_bse.update([df_bse_final.columns.tolist()] + df_bse_final.values.tolist())
@@ -306,6 +349,8 @@ def process_bse_data(df_bse):
         return True
     except Exception as e:
         logger.error(f"❌ BSE processing failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 # ========================= 
@@ -325,6 +370,8 @@ def main():
             nse_success = process_nse_data(z)
     except Exception as e:
         logger.error(f"❌ NSE exception: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
     
     if nse_success:
         smart_delay(2, 4)
@@ -335,13 +382,20 @@ def main():
             bse_success = process_bse_data(df_bse)
     except Exception as e:
         logger.error(f"❌ BSE exception: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
     
     logger.info("\n" + "="*60)
     logger.info(f"NSE: {'✅ SUCCESS' if nse_success else '❌ FAILED'}")
     logger.info(f"BSE: {'✅ SUCCESS' if bse_success else '❌ FAILED'}")
     logger.info("="*60)
     
-    sys.exit(0 if (nse_success or bse_success) else 1)
+    if nse_success or bse_success:
+        logger.info("\n🎉 Job completed successfully!")
+        sys.exit(0)
+    else:
+        logger.error("\n💔 Both exchanges failed")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
