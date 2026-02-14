@@ -7,7 +7,6 @@ import sys
 import os
 import json
 import gspread
-import gzip
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta, timezone
 from requests.adapters import HTTPAdapter
@@ -126,7 +125,7 @@ def create_smart_session():
     return session
 
 # ========================= 
-# NSE FETCHER WITH GZIP HANDLING
+# NSE FETCHER - TRY ZIP FIRST
 # ========================= 
 def fetch_nse_bhavcopy_smart(trade_date, date_str):
     logger.info("\n🚀 Fetching NSE Bhavcopy (Smart Mode)")
@@ -185,29 +184,22 @@ def fetch_nse_bhavcopy_smart(trade_date, date_str):
         
         if resp.status_code == 200:
             content = resp.content
-            logger.info(f"   Raw content length: {len(content)} bytes")
+            logger.info(f"   Content length: {len(content)} bytes")
+            logger.info(f"   First 4 bytes: {content[:4]}")
             
-            # CRITICAL FIX: Try to decompress gzip if needed
-            try:
-                # Check if content is gzip compressed
-                if content[:2] == b'\x1f\x8b':  # gzip magic number
-                    logger.info("   🔓 Decompressing gzip content...")
-                    content = gzip.decompress(content)
-                    logger.info(f"   ✅ Decompressed to {len(content)} bytes")
-            except Exception as e:
-                logger.warning(f"   ⚠️ Gzip decompression failed (might not be compressed): {e}")
-            
-            # Try to parse as ZIP first
+            # CRITICAL: Try ZIP FIRST (before JSON)
             try:
                 z = zipfile.ZipFile(io.BytesIO(content))
-                logger.info(f"✅ Received ZIP with {len(z.namelist())} files")
+                logger.info(f"✅ Direct ZIP with {len(z.namelist())} files: {z.namelist()}")
                 return z
-            except Exception:
-                pass
+            except zipfile.BadZipFile:
+                logger.info("   Not a direct ZIP file, trying JSON...")
             
-            # Try to parse as JSON
+            # Only try JSON if ZIP failed
             try:
-                data = json.loads(content)
+                # Try to decode as text first
+                text_content = content.decode('utf-8')
+                data = json.loads(text_content)
                 logger.info(f"   JSON response type: {type(data)}")
                 
                 if isinstance(data, list) and len(data) > 0 and "filePath" in data[0]:
@@ -226,10 +218,10 @@ def fetch_nse_bhavcopy_smart(trade_date, date_str):
                         logger.info(f"✅ Downloaded ZIP from archives")
                         return z
                 else:
-                    logger.warning(f"⚠️ JSON missing filePath or wrong format")
-            except json.JSONDecodeError:
-                logger.warning(f"⚠️ Could not parse as JSON")
-                logger.warning(f"   Content preview: {content[:200]}")
+                    logger.warning(f"⚠️ JSON missing filePath")
+            except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                logger.warning(f"⚠️ Not valid JSON: {e}")
+                logger.warning(f"   This might be compressed data NSE is sending")
             
     except requests.exceptions.Timeout:
         logger.error("❌ Timeout even with 180s")
