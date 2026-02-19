@@ -1,28 +1,24 @@
 name: Daily Bhavcopy
-
 on:
   schedule:
     - cron: "30 21 * * *"   # 03:00 AM IST
   workflow_dispatch:
-
 jobs:
   run-bhavcopy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas requests gspread google-auth
-
+          pip install pandas requests gspread google-auth playwright   # ← ADD playwright here
+      - name: Install Playwright Browsers                              # ← ADD this entire new step
+        run: playwright install chromium --with-deps
       - name: Run Bhavcopy Script
         env:
           GSHEET_CREDS: ${{ secrets.GSHEET_CREDS }}
