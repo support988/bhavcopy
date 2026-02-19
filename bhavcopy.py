@@ -2,37 +2,16 @@ import requests
 import zipfile
 import io
 import pandas as pd
-import datetime
-import sys
 import os
 import json
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta, timezone
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-import time
-import random
-
-# =========================
-# RANDOM STARTUP DELAY (Anti-Bot)
-# =========================
-# random_minutes = random.randint(0, 30)  # 0-30 minutes random delay
-# random_seconds = random.randint(0, 59)  # 0-59 seconds
-# total_delay_seconds = (random_minutes * 60) + random_seconds
-
-# print(f"⏰ Random startup delay: {random_minutes}m {random_seconds}s (avoiding bot detection)")
-# time.sleep(total_delay_seconds)
+from playwright.sync_api import sync_playwright
 
 # =========================
 # COMMON CONFIG
 # =========================
-HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "*/*",
-    "Referer": "https://www.nseindia.com/all-reports"
-}
-
 IST = timezone(timedelta(hours=5, minutes=30))
 today_ist = datetime.now(IST).date()
 trade_date = today_ist - timedelta(days=1)
@@ -54,9 +33,42 @@ sheet = gc.open_by_key(os.environ["SPREADSHEET_ID"])
 # =========================
 # ========== NSE ==========
 # =========================
-print("\n🚀 Fetching NSE Bhavcopy")
+print("\n🚀 Fetching NSE Bhavcopy via Playwright")
 
-API_URL = "https://www.nseindia.com/api/reports"
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    context = browser.new_context(
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        viewport={"width": 1920, "height": 1080},
+        locale="en-IN",
+        timezone_id="Asia/Kolkata"
+    )
+    page = context.new_page()
+
+    print("🌐 Opening NSE homepage...")
+    page.goto("https://www.nseindia.com", wait_until="networkidle", timeout=30000)
+    page.wait_for_timeout(3000)
+
+    print("🌐 Opening NSE reports page...")
+    page.goto("https://www.nseindia.com/all-reports", wait_until="networkidle", timeout=30000)
+    page.wait_for_timeout(3000)
+
+    cookies = context.cookies()
+    browser.close()
+
+print(f"🍪 Got {len(cookies)} cookies from NSE")
+
+# Build requests session with real browser cookies
+session = requests.Session()
+session.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "*/*",
+    "Accept-Language": "en-IN,en;q=0.9",
+    "Referer": "https://www.nseindia.com/all-reports",
+    "X-Requested-With": "XMLHttpRequest",
+})
+for c in cookies:
+    session.cookies.set(c["name"], c["value"], domain=c["domain"])
 
 ARCHIVES_PAYLOAD = [{
     "name": "CM-UDiFF Common Bhavcopy Final (zip)",
@@ -65,23 +77,6 @@ ARCHIVES_PAYLOAD = [{
     "section": "equities"
 }]
 
-session = requests.Session()
-session.headers.update(HEADERS)
-
-# ✅ ADD THIS BLOCK (Retry + Backoff)
-retry_strategy = Retry(
-    total=5,                 # total retries
-    backoff_factor=3,         # 3s, 6s, 12s, ...
-    status_forcelist=[429, 500, 502, 503, 504],
-    allowed_methods=["GET"]
-)
-
-adapter = HTTPAdapter(max_retries=retry_strategy)
-session.mount("https://", adapter)
-
-# Warm-up (MANDATORY for NSE)
-session.get("https://www.nseindia.com", timeout=10)
-
 params = {
     "archives": json.dumps(ARCHIVES_PAYLOAD),
     "date": date_str_nse,
@@ -89,9 +84,10 @@ params = {
     "mode": "single"
 }
 
-resp = session.get(API_URL, params=params, timeout=20)
+print("📡 Calling NSE API...")
+resp = session.get("https://www.nseindia.com/api/reports", params=params, timeout=30)
 content_type = resp.headers.get("Content-Type", "").lower()
-print("📦 NSE Response Content-Type:", content_type)
+print(f"📦 Content-Type: {content_type} | Status: {resp.status_code}")
 
 if "zip" in content_type:
     z = zipfile.ZipFile(io.BytesIO(resp.content))
@@ -99,13 +95,13 @@ if "zip" in content_type:
 elif "json" in content_type:
     data = resp.json()
     if not data or "filePath" not in data[0]:
-        raise Exception("❌ NSE JSON received but no filePath")
-
+        raise Exception(f"❌ NSE JSON has no filePath: {data}")
     zip_url = "https://archives.nseindia.com" + data[0]["filePath"]
-    z = zipfile.ZipFile(io.BytesIO(session.get(zip_url).content))
+    print(f"📥 Downloading zip from: {zip_url}")
+    z = zipfile.ZipFile(io.BytesIO(session.get(zip_url, timeout=30).content))
 
 else:
-    raise Exception("❌ NSE Bhavcopy not available")
+    raise Exception(f"❌ Unexpected NSE response: status={resp.status_code}, type={content_type}, body={resp.text[:300]}")
 
 csv_name = z.namelist()[0]
 df_nse = pd.read_csv(z.open(csv_name))
@@ -147,7 +143,7 @@ bse_headers = {
 bse_resp = requests.get(bse_url, headers=bse_headers, timeout=20)
 
 if bse_resp.status_code != 200:
-    raise Exception("❌ BSE Bhavcopy not available")
+    raise Exception(f"❌ BSE Bhavcopy not available (status: {bse_resp.status_code})")
 
 df_bse = pd.read_csv(io.BytesIO(bse_resp.content))
 df_bse.columns = [c.strip() for c in df_bse.columns]
